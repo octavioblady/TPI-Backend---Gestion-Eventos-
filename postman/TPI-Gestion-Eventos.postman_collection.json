@@ -1,0 +1,4894 @@
+{
+  "info": {
+    "_postman_id": "2c58a020-51e7-4182-8642-2a4e531efdd0",
+    "name": "TPI Backend 2026 - Gestión de eventos en un complejo multiusos",
+    "description": "Colección de pruebas de la API (todo pasa por el Gateway). Requiere `docker compose up --build` y Keycloak con el realm 'complejo' importado.\n\nOrden: 00 Autenticación → 01 Recursos → 02 Eventos → 03 Escenarios. La carpeta 04 es manual.\n\nLos tokens y los ids del catálogo se obtienen solos si faltan.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Inicializa lo necesario (tokens e ids del catálogo) para que cualquier request se pueda ejecutar sola.",
+          "const gw = pm.collectionVariables.get('urlGateway');",
+          "const kc = pm.collectionVariables.get('urlKeycloak');",
+          "const ahora = Date.now();",
+          "",
+          "function tomarToken(usuario, variable, siguiente) {",
+          "  const vence = Number(pm.collectionVariables.get(variable + 'Ts') || 0);",
+          "  if (pm.collectionVariables.get(variable) && ahora - vence < 25 * 60 * 1000) return siguiente();",
+          "  pm.sendRequest({",
+          "    url: kc + '/realms/complejo/protocol/openid-connect/token', method: 'POST',",
+          "    header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "    body: { mode: 'urlencoded', urlencoded: [",
+          "      { key: 'client_id', value: 'complejo-api' }, { key: 'grant_type', value: 'password' },",
+          "      { key: 'username', value: usuario }, { key: 'password', value: usuario } ] }",
+          "  }, (err, res) => {",
+          "    if (!err && res.code === 200) {",
+          "      pm.collectionVariables.set(variable, res.json().access_token);",
+          "      pm.collectionVariables.set(variable + 'Ts', String(Date.now()));",
+          "    }",
+          "    siguiente();",
+          "  });",
+          "}",
+          "",
+          "function tomarCatalogo(siguiente) {",
+          "  if (pm.collectionVariables.get('canchaId') && pm.collectionVariables.get('sillasId')) return siguiente();",
+          "  const cab = { 'Authorization': 'Bearer ' + pm.collectionVariables.get('tokenCliente') };",
+          "  pm.sendRequest({ url: gw + '/api/v1/instalaciones', method: 'GET', header: cab }, (e1, r1) => {",
+          "    if (!e1 && r1.code === 200) {",
+          "      r1.json().forEach(i => {",
+          "        if (/cancha/i.test(i.nombre)) pm.collectionVariables.set('canchaId', i.id);",
+          "        else if (/sum/i.test(i.nombre)) pm.collectionVariables.set('sumId', i.id);",
+          "        else if (/sal[oó]n/i.test(i.nombre)) pm.collectionVariables.set('salonId', i.id);",
+          "        else if (/cocina/i.test(i.nombre)) pm.collectionVariables.set('cocinaId', i.id);",
+          "      });",
+          "    }",
+          "    pm.sendRequest({ url: gw + '/api/v1/servicios', method: 'GET', header: cab }, (e2, r2) => {",
+          "      if (!e2 && r2.code === 200) {",
+          "        r2.json().forEach(s => { if (/silla/i.test(s.nombre)) pm.collectionVariables.set('sillasId', s.id); });",
+          "      }",
+          "      siguiente();",
+          "    });",
+          "  });",
+          "}",
+          "",
+          "tomarToken('admin1', 'tokenAdmin', () =>",
+          "  tomarToken('cliente1', 'tokenCliente', () =>",
+          "    tomarToken('cliente2', 'tokenCliente2', () =>",
+          "      tomarCatalogo(() => {}))));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "urlGateway",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "urlKeycloak",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "tokenAdmin",
+      "value": ""
+    },
+    {
+      "key": "tokenCliente",
+      "value": ""
+    },
+    {
+      "key": "tokenCliente2",
+      "value": ""
+    },
+    {
+      "key": "canchaId",
+      "value": ""
+    },
+    {
+      "key": "sumId",
+      "value": ""
+    },
+    {
+      "key": "salonId",
+      "value": ""
+    },
+    {
+      "key": "cocinaId",
+      "value": ""
+    },
+    {
+      "key": "sillasId",
+      "value": ""
+    },
+    {
+      "key": "eventoId",
+      "value": ""
+    },
+    {
+      "key": "dia",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Autenticación",
+      "item": [
+        {
+          "name": "Token ADMIN (admin1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Keycloak entrega el token', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenAdmin', pm.response.json().access_token);",
+                  "pm.collectionVariables.set('tokenAdminTs', String(Date.now()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "complejo-api"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "admin1"
+                },
+                {
+                  "key": "password",
+                  "value": "admin1"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{urlKeycloak}}/realms/complejo/protocol/openid-connect/token",
+              "host": [
+                "{{urlKeycloak}}"
+              ],
+              "path": [
+                "realms",
+                "complejo",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token CLIENTE (cliente1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Keycloak entrega el token', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenCliente', pm.response.json().access_token);",
+                  "pm.collectionVariables.set('tokenClienteTs', String(Date.now()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "complejo-api"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "cliente1"
+                },
+                {
+                  "key": "password",
+                  "value": "cliente1"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{urlKeycloak}}/realms/complejo/protocol/openid-connect/token",
+              "host": [
+                "{{urlKeycloak}}"
+              ],
+              "path": [
+                "realms",
+                "complejo",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token CLIENTE 2 (cliente2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Keycloak entrega el token', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenCliente2', pm.response.json().access_token);",
+                  "pm.collectionVariables.set('tokenCliente2Ts', String(Date.now()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "complejo-api"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "cliente2"
+                },
+                {
+                  "key": "password",
+                  "value": "cliente2"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{urlKeycloak}}/realms/complejo/protocol/openid-connect/token",
+              "host": [
+                "{{urlKeycloak}}"
+              ],
+              "path": [
+                "realms",
+                "complejo",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Tokens de prueba (grant password, solo desarrollo). Quedan guardados en variables de la colección."
+    },
+    {
+      "name": "01 Recursos",
+      "item": [
+        {
+          "name": "Instalaciones · listar (CLIENTE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/instalaciones",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instalaciones"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Hay 4 instalaciones iniciales', () => pm.expect(pm.response.json().length).to.be.at.least(4));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Instalaciones · registrar (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/instalaciones",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instalaciones"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Quincho {{$timestamp}}\",\n  \"descripcion\": \"Quincho exterior\",\n  \"capacidad\": 30,\n  \"aireLibre\": true,\n  \"horarios\": [\n    {\n      \"dia\": \"SATURDAY\",\n      \"apertura\": \"10:00\",\n      \"cierre\": \"20:00\"\n    },\n    {\n      \"dia\": \"SUNDAY\",\n      \"apertura\": \"10:00\",\n      \"cierre\": \"20:00\"\n    }\n  ],\n  \"equipamiento\": [\n    {\n      \"nombre\": \"Parrilla\",\n      \"cantidad\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "const i = pm.response.json();",
+                  "pm.collectionVariables.set('instalacionNuevaId', i.id);",
+                  "pm.test('Usa la tarifa por defecto de $10.000/h', () => pm.expect(i.tarifaHora).to.eql(10000));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Instalaciones · modificar (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/instalaciones/{{instalacionNuevaId}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instalaciones",
+                "{{instalacionNuevaId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Quincho renovado {{$timestamp}}\",\n  \"descripcion\": \"Quincho exterior\",\n  \"capacidad\": 40,\n  \"aireLibre\": true,\n  \"tarifaHora\": 10000,\n  \"horarios\": [\n    {\n      \"dia\": \"SATURDAY\",\n      \"apertura\": \"09:00\",\n      \"cierre\": \"21:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Capacidad actualizada', () => pm.expect(pm.response.json().capacidad).to.eql(40));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Instalaciones · dar de baja (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/instalaciones/{{instalacionNuevaId}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "instalaciones",
+                "{{instalacionNuevaId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Servicios · listar (CLIENTE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/servicios",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicios"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Servicios · registrar (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/servicios",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicios"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Proyector {{$timestamp}}\",\n  \"descripcion\": \"Proyector HD\",\n  \"precioUnitario\": 8000,\n  \"stockTotal\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('servicioNuevoId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Servicios · modificar precio y stock (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/servicios/{{servicioNuevoId}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicios",
+                "{{servicioNuevoId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Proyector {{$timestamp}}\",\n  \"descripcion\": \"Proyector HD\",\n  \"precioUnitario\": 9000,\n  \"stockTotal\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Stock actualizado', () => pm.expect(pm.response.json().stockTotal).to.eql(6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Servicios · stock por fecha (CLIENTE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/servicios/{{sillasId}}/stock?fecha={{dia}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicios",
+                "{{sillasId}}",
+                "stock"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "{{dia}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disponibilidad · consultar (CLIENTE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/disponibilidad?fecha={{dia}}&horaInicio=18:00&horaFin=22:00&capacidad=30",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "disponibilidad"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "{{dia}}"
+                },
+                {
+                  "key": "horaInicio",
+                  "value": "18:00"
+                },
+                {
+                  "key": "horaFin",
+                  "value": "22:00"
+                },
+                {
+                  "key": "capacidad",
+                  "value": "30"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Hay al menos una instalación libre', () => pm.expect(pm.response.json().some(x => x.disponible)).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mantenimientos · bloquear el SUM (ADMIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/mantenimientos",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mantenimientos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"instalacionId\": {{sumId}}, \"desde\": \"{{dia}}T00:00:00\", \"hasta\": \"{{dia}}T23:59:00\", \"motivo\": \"Pintura\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('mantenimientoId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mantenimientos · finalizar bloqueo (ADMIN)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/mantenimientos/{{mantenimientoId}}/finalizacion",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mantenimientos",
+                "{{mantenimientoId}}",
+                "finalizacion"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('FINALIZADO', () => pm.expect(pm.response.json().estado).to.eql('FINALIZADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Eventos (flujo principal)",
+      "item": [
+        {
+          "name": "1 · Solicitar evento en el SUM con 20 sillas (CLIENTE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 30,\n  \"servicios\": [{\"servicioId\": {{sillasId}}, \"cantidad\": 20}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "const e = pm.response.json();",
+                  "pm.collectionVariables.set('eventoId', e.id);",
+                  "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 · Registrar seña y validar (ADMIN) → CONFIRMADO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos",
+                "{{eventoId}}",
+                "senia"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"abonada\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const e = pm.response.json();",
+                  "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3 · Detalle del evento (CLIENTE dueño)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos",
+                "{{eventoId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const e = pm.response.json();",
+                  "pm.test('Precio 4 h x $10.000 + 20 sillas x $200 = $44.000', () => pm.expect(e.precioTotal).to.eql(44000));",
+                  "pm.test('Seña 50% = $22.000', () => pm.expect(e.seniaMonto).to.eql(22000));",
+                  "pm.test('Historial SOLICITADO -> CONFIRMADO', () => pm.expect(e.historial.length).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4 · Listado de eventos del cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5 · Cancelar (CLIENTE) con más de 48 h → seña reembolsable",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/cancelacion",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos",
+                "{{eventoId}}",
+                "cancelacion"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "const e = pm.response.json();",
+                  "pm.test('CANCELADO', () => pm.expect(e.estado).to.eql('CANCELADO'));",
+                  "pm.test('Seña reembolsable (regla 5)', () => pm.expect(e.seniaReembolsable).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Escenarios (positivos y negativos)",
+      "item": [
+        {
+          "name": "E-01 · Evento en el SUM con anticipación, horario y capacidad válidos → CONFIRMADO",
+          "item": [
+            {
+              "name": "1 · Solicitar (CLIENTE)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 30,\n  \"servicios\": [{\"servicioId\": {{sillasId}}, \"cantidad\": 20}]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña (ADMIN)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Stock descontado",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/servicios/{{sillasId}}/stock?fecha={{dia}}",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "servicios",
+                    "{{sillasId}}",
+                    "stock"
+                  ],
+                  "query": [
+                    {
+                      "key": "fecha",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('20 sillas reservadas', () => pm.expect(pm.response.json().reservado).to.eql(20));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-02 · Evento que combina cancha y salón → ambas reservas",
+          "item": [
+            {
+              "name": "1 · Solicitar cancha + salón",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{canchaId}},{{salonId}}],\n  \"inicio\": \"{{dia}}T10:00:00\",\n  \"fin\": \"{{dia}}T14:00:00\",\n  \"asistentes\": 80\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · El detalle muestra ambas instalaciones",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Dos instalaciones', () => pm.expect(pm.response.json().instalaciones.length).to.eql(2));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-03 · Consulta de disponibilidad válida → 200 con instalaciones libres",
+          "item": [
+            {
+              "name": "Consultar",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/disponibilidad?fecha={{dia}}&horaInicio=10:00&horaFin=12:00&capacidad=20",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "disponibilidad"
+                  ],
+                  "query": [
+                    {
+                      "key": "fecha",
+                      "value": "{{dia}}"
+                    },
+                    {
+                      "key": "horaInicio",
+                      "value": "10:00"
+                    },
+                    {
+                      "key": "horaFin",
+                      "value": "12:00"
+                    },
+                    {
+                      "key": "capacidad",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Hay espacios libres', () => pm.expect(pm.response.json().filter(x => x.disponible).length).to.be.above(0));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-04 · Evento para mañana → RECHAZADO (regla 1: 48 h de anticipación)",
+          "item": [
+            {
+              "name": "1 · Solicitar para mañana",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{fechaManana}}T18:00:00\", \"fin\": \"{{fechaManana}}T20:00:00\", \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const f = new Date(); f.setDate(f.getDate() + 1); const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('fechaManana', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('eventoId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña → RECHAZADO por anticipación",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo ANTICIPACION_INSUFICIENTE', () => pm.expect(e.codigoRechazo).to.eql('ANTICIPACION_INSUFICIENTE'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-05 · Disponibilidad para mañana → sin disponibilidad (regla 1)",
+          "item": [
+            {
+              "name": "Consultar",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/disponibilidad?fecha={{fechaManana}}&horaInicio=10:00&horaFin=12:00",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "disponibilidad"
+                  ],
+                  "query": [
+                    {
+                      "key": "fecha",
+                      "value": "{{fechaManana}}"
+                    },
+                    {
+                      "key": "horaInicio",
+                      "value": "10:00"
+                    },
+                    {
+                      "key": "horaFin",
+                      "value": "12:00"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const f = new Date(); f.setDate(f.getDate() + 1); const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('fechaManana', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Ninguna instalación disponible', () => pm.expect(pm.response.json().every(x => !x.disponible)).to.be.true);",
+                      "pm.test('Motivo: anticipación', () => pm.expect(pm.response.json()[0].codigoMotivo).to.eql('ANTICIPACION_INSUFICIENTE'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-06 y E-07 · Mantenimiento bloquea el SUM; al finalizarlo se puede reservar",
+          "item": [
+            {
+              "name": "1 · ADMIN bloquea el SUM todo el día",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/mantenimientos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mantenimientos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"instalacionId\": {{sumId}}, \"desde\": \"{{dia}}T00:00:00\", \"hasta\": \"{{dia}}T23:59:00\", \"motivo\": \"Mantenimiento\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('mantenimientoId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · CLIENTE solicita el SUM ese día",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Registrar seña → RECHAZADO 'Mantenimiento' (E-06)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo MANTENIMIENTO', () => pm.expect(e.codigoRechazo).to.eql('MANTENIMIENTO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · ADMIN finaliza el bloqueo",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/mantenimientos/{{mantenimientoId}}/finalizacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mantenimientos",
+                    "{{mantenimientoId}}",
+                    "finalizacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "5 · CLIENTE vuelve a solicitar",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "6 · Registrar seña → CONFIRMADO (E-07)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-08 · Más asistentes que la capacidad (SUM = 50) → RECHAZADO (regla 3)",
+          "item": [
+            {
+              "name": "1 · Solicitar con 80 asistentes",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 80\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo CAPACIDAD_EXCEDIDA', () => pm.expect(e.codigoRechazo).to.eql('CAPACIDAD_EXCEDIDA'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-09 · Fuera del horario de la cancha (cierra 22:00) → RECHAZADO (regla 4)",
+          "item": [
+            {
+              "name": "1 · Solicitar de 21:00 a 23:00",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{canchaId}}],\n  \"inicio\": \"{{dia}}T21:00:00\",\n  \"fin\": \"{{dia}}T23:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo FUERA_DE_HORARIO', () => pm.expect(e.codigoRechazo).to.eql('FUERA_DE_HORARIO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Solicitar de 03:00 a 05:00",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{canchaId}}],\n  \"inicio\": \"{{dia}}T03:00:00\",\n  \"fin\": \"{{dia}}T05:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo FUERA_DE_HORARIO', () => pm.expect(e.codigoRechazo).to.eql('FUERA_DE_HORARIO'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-10 · Segundo evento en la misma instalación y franja → RECHAZADO por conflicto",
+          "item": [
+            {
+              "name": "1 · CLIENTE 1 solicita el SUM",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña → CONFIRMADO",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · CLIENTE 2 solicita el SUM, franja superpuesta",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T20:00:00\",\n  \"fin\": \"{{dia}}T23:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · Registrar seña → RECHAZADO",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo CONFLICTO_DISPONIBILIDAD', () => pm.expect(e.codigoRechazo).to.eql('CONFLICTO_DISPONIBILIDAD'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-11 y E-13 · Cancelación con más de 48 h: seña reembolsable y recursos liberados",
+          "item": [
+            {
+              "name": "1 · Solicitar con 20 sillas",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10,\n  \"servicios\": [{\"servicioId\": {{sillasId}}, \"cantidad\": 20}]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Cancelar (CLIENTE)",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/cancelacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "cancelacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('CANCELADO', () => pm.expect(e.estado).to.eql('CANCELADO'));",
+                      "pm.test('Seña reembolsable', () => pm.expect(e.seniaReembolsable).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · El stock volvió a 0 reservadas (E-13)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/servicios/{{sillasId}}/stock?fecha={{dia}}",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "servicios",
+                    "{{sillasId}}",
+                    "stock"
+                  ],
+                  "query": [
+                    {
+                      "key": "fecha",
+                      "value": "{{dia}}"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Stock devuelto', () => pm.expect(pm.response.json().reservado).to.eql(0));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "5 · Otro cliente puede reservar la misma franja (E-13)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "6 · Registrar seña → CONFIRMADO",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "E-12 (cancelación con menos de 48 h → seña no reembolsable) no se puede reproducir por API sin esperar que pase el tiempo: está cubierto por la prueba automática EventoApiTest con reloj fijo."
+        },
+        {
+          "name": "E-14 · Pedir más sillas que el stock → RECHAZADO",
+          "item": [
+            {
+              "name": "1 · Solicitar 5.000 sillas",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10,\n  \"servicios\": [{\"servicioId\": {{sillasId}}, \"cantidad\": 5000}]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo STOCK_INSUFICIENTE', () => pm.expect(e.codigoRechazo).to.eql('STOCK_INSUFICIENTE'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-16 y E-28 · API meteorológica fuera de servicio → CONFIRMADO sin advertencia",
+          "item": [
+            {
+              "name": "1 · Solicitar el patio (aire libre) para dentro de ~10 días",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{salonId}}],\n  \"inicio\": \"{{dia}}T{{hIni}}:00\",\n  \"fin\": \"{{dia}}T{{hFin}}:00\",\n  \"asistentes\": 20\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 8 + Math.floor(Math.random() * 7);",
+                      "const h = 8 + Math.floor(Math.random() * 13); pm.collectionVariables.set('hIni', String(h).padStart(2, '0')); pm.collectionVariables.set('hFin', String(h + 1).padStart(2, '0'));",
+                      "const f = new Date(); f.setDate(f.getDate() + n); const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña → CONFIRMADO (con Open-Meteo caído o accesible)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Consultar pronóstico",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/pronostico",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "pronostico"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Informa el estado del pronóstico', () => pm.expect(['SIN_ADVERTENCIA', 'ADVERTENCIA', 'NO_DISPONIBLE']).to.include(pm.response.json().estado));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Con Internet, el resultado depende del pronóstico real (puede haber advertencia: el evento igual queda CONFIRMADO). E-15 (pronóstico adverso simulado) y E-16 con API caída forzada están cubiertas por pruebas automáticas con un proveedor simulado (EventoApiTest, ClimaServiceTest, OpenMeteoClientTest)."
+        },
+        {
+          "name": "E-17 · CLIENTE intenta crear una instalación → 403",
+          "item": [
+            {
+              "name": "POST /instalaciones con token CLIENTE",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/instalaciones",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "instalaciones"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nombre\": \"Pirata\",\n  \"capacidad\": 10,\n  \"horarios\": [\n    {\n      \"dia\": \"MONDAY\",\n      \"apertura\": \"10:00\",\n      \"cierre\": \"12:00\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 403', () => pm.response.to.have.status(403));",
+                      "pm.test('Error estándar SIN_PERMISOS', () => pm.expect(pm.response.json().codigo).to.eql('SIN_PERMISOS'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-18 y E-22 · Sin token o token inválido → 401 (lo responde el Gateway)",
+          "item": [
+            {
+              "name": "Sin token",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/instalaciones",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "instalaciones"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Token inválido",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/instalaciones",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "instalaciones"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.request.headers.add({key: 'Authorization', value: 'Bearer esto.no.es-un-jwt'});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 401', () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-19 · CLIENTE cancela el evento de otro cliente → 403",
+          "item": [
+            {
+              "name": "1 · CLIENTE 1 solicita",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · CLIENTE 2 intenta cancelarlo",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/cancelacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "cancelacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente2}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · CLIENTE 2 intenta verlo",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente2}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-20 y E-21 · Ciclo de vida del evento y transiciones inválidas",
+          "item": [
+            {
+              "name": "1 · Solicitar la cocina",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{cocinaId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · CLIENTE intenta iniciar → 403",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/inicio",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "inicio"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 403', () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · ADMIN inicia → EN_CURSO (E-20)",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/inicio",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "inicio"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('EN_CURSO', () => pm.expect(pm.response.json().estado).to.eql('EN_CURSO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "5 · No se puede cancelar un evento EN_CURSO → 409",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/cancelacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "cancelacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "6 · ADMIN finaliza → FINALIZADO (E-20)",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/finalizacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "finalizacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('FINALIZADO', () => pm.expect(pm.response.json().estado).to.eql('FINALIZADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "7 · Otro evento: se rechaza por falta de seña",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{cocinaId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "8 · Seña no abonada → RECHAZADO",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo SENIA_NO_ABONADA', () => pm.expect(e.codigoRechazo).to.eql('SENIA_NO_ABONADA'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "9 · Iniciar un evento RECHAZADO → 409 (E-21)",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/inicio",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "inicio"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 409', () => pm.response.to.have.status(409));",
+                      "pm.test('TRANSICION_INVALIDA', () => pm.expect(pm.response.json().codigo).to.eql('TRANSICION_INVALIDA'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-23 · /internal/** no tiene ruta en el Gateway → 404",
+          "item": [
+            {
+              "name": "POST /internal/reservas con token ADMIN",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/internal/reservas",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "internal",
+                    "reservas"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST /internal/reservas/cotizacion con token CLIENTE",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/internal/reservas/cotizacion",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "internal",
+                    "reservas",
+                    "cotizacion"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "E-24 (acceso directo al puerto 8081 desde el host → conexión rechazada) se verifica fuera de Postman: `curl http://localhost:8081/actuator/health` debe fallar al correr con Docker Compose."
+        },
+        {
+          "name": "E-27 · Falla la segunda instalación de una reserva multiespacio → no queda nada reservado",
+          "item": [
+            {
+              "name": "1 · Reserva el salón",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{salonId}}],\n  \"inicio\": \"{{dia}}T10:00:00\",\n  \"fin\": \"{{dia}}T14:00:00\",\n  \"asistentes\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const n = 30 + Math.floor(Math.random() * 3000);",
+                      "const f = new Date(); f.setDate(f.getDate() + n);",
+                      "const p = x => String(x).padStart(2, '0');",
+                      "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2 · Registrar seña",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado CONFIRMADO', () => pm.expect(e.estado).to.eql('CONFIRMADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3 · Otro cliente pide cocina + salón (el salón está ocupado)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente2}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"instalacionIds\": [{{cocinaId}},{{salonId}}],\n  \"inicio\": \"{{dia}}T12:00:00\",\n  \"fin\": \"{{dia}}T13:00:00\",\n  \"asistentes\": 5\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                      "const e = pm.response.json();",
+                      "pm.collectionVariables.set('eventoId', e.id);",
+                      "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4 · Registrar seña → RECHAZADO",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "eventos",
+                    "{{eventoId}}",
+                    "senia"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenAdmin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"abonada\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "const e = pm.response.json();",
+                      "pm.test('Estado RECHAZADO', () => pm.expect(e.estado).to.eql('RECHAZADO'));",
+                      "pm.test('Código de rechazo CONFLICTO_DISPONIBILIDAD', () => pm.expect(e.codigoRechazo).to.eql('CONFLICTO_DISPONIBILIDAD'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "5 · La cocina quedó libre",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/api/v1/disponibilidad?fecha={{dia}}&horaInicio=12:00&horaFin=13:00",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "disponibilidad"
+                  ],
+                  "query": [
+                    {
+                      "key": "fecha",
+                      "value": "{{dia}}"
+                    },
+                    {
+                      "key": "horaInicio",
+                      "value": "12:00"
+                    },
+                    {
+                      "key": "horaFin",
+                      "value": "13:00"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCliente}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Cocina disponible', () => pm.expect(pm.response.json().find(x => /cocina/i.test(x.nombre)).disponible).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "E-30 · Especificación OpenAPI vía Gateway",
+          "item": [
+            {
+              "name": "OpenAPI de recursos-service",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/docs/recursos/v3/api-docs",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "docs",
+                    "recursos",
+                    "v3",
+                    "api-docs"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Lista /api/v1/instalaciones', () => pm.expect(pm.response.json().paths).to.have.property('/api/v1/instalaciones'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "OpenAPI de eventos-service",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{urlGateway}}/docs/eventos/v3/api-docs",
+                  "host": [
+                    "{{urlGateway}}"
+                  ],
+                  "path": [
+                    "docs",
+                    "eventos",
+                    "v3",
+                    "api-docs"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Lista /api/v1/eventos', () => pm.expect(pm.response.json().paths).to.have.property('/api/v1/eventos'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "description": "Cada escenario es independiente: usa una fecha al azar a más de 30 días para no chocar con otras corridas. Ejecutar la colección con el Runner (o Newman) en orden."
+    },
+    {
+      "name": "04 Resiliencia (manual: detener recursos-service)",
+      "item": [
+        {
+          "name": "0 · (con todo levantado) Solicitar un evento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instalacionIds\": [{{cocinaId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 201', () => pm.response.to.have.status(201));",
+                  "const e = pm.response.json();",
+                  "pm.collectionVariables.set('eventoId', e.id);",
+                  "pm.test('Queda SOLICITADO a la espera de la seña', () => pm.expect(e.estado).to.eql('SOLICITADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E-25 · Con Recursos detenido: registrar seña → 503 y evento RECHAZADO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}/senia",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos",
+                "{{eventoId}}",
+                "senia"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"abonada\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Antes de ejecutar: `docker compose stop recursos-service`. Después: `docker compose start recursos-service`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 503', () => pm.response.to.have.status(503));",
+                  "pm.test('Código RECURSOS_NO_DISPONIBLE', () => pm.expect(pm.response.json().codigo).to.eql('RECURSOS_NO_DISPONIBLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E-25 · El evento quedó RECHAZADO con motivo técnico",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos/{{eventoId}}",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos",
+                "{{eventoId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenAdmin}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('RECHAZADO por recursos no disponible', () => pm.expect(pm.response.json().codigoRechazo).to.eql('RECURSOS_NO_DISPONIBLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E-29 · Con el circuito abierto: respuesta inmediata 503 (sin esperar el timeout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{urlGateway}}/api/v1/eventos",
+              "host": [
+                "{{urlGateway}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "eventos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenCliente}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instalacionIds\": [{{sumId}}],\n  \"inicio\": \"{{dia}}T18:00:00\",\n  \"fin\": \"{{dia}}T22:00:00\",\n  \"asistentes\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const n = 30 + Math.floor(Math.random() * 3000);",
+                  "const f = new Date(); f.setDate(f.getDate() + n);",
+                  "const p = x => String(x).padStart(2, '0');",
+                  "pm.collectionVariables.set('dia', f.getFullYear() + '-' + p(f.getMonth() + 1) + '-' + p(f.getDate()));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Responde 503', () => pm.response.to.have.status(503));",
+                  "pm.test('Responde rápido (circuit breaker)', () => pm.expect(pm.response.responseTime).to.be.below(1500));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Ejecutar SOLO a mano. Un fallo de Recursos no debe dejar reservas a medias ni stock descontado. Si el circuito ya se abrió, tarda unos 10 s en volver a probar Recursos."
+    }
+  ]
+}

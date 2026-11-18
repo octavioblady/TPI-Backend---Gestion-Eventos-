@@ -1,0 +1,74 @@
+{
+  "realm": "complejo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 1800,
+  "roles": {
+    "realm": [
+      { "name": "ADMIN", "description": "Administrador del complejo" },
+      { "name": "CLIENTE", "description": "Cliente que solicita eventos" },
+      { "name": "SERVICIO", "description": "Cuenta técnica de eventos-service para las llamadas internas a recursos-service" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "complejo-api",
+      "name": "Usuarios de la API (Postman, Swagger UI)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:8000/*"],
+      "webOrigins": ["*"]
+    },
+    {
+      "clientId": "eventos-service",
+      "name": "Cuenta técnica de eventos-service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "eventos-service-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "admin1",
+      "enabled": true,
+      "email": "admin1@complejo.local",
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "Uno",
+      "credentials": [{ "type": "password", "value": "admin1", "temporary": false }],
+      "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "cliente1",
+      "enabled": true,
+      "email": "cliente1@complejo.local",
+      "emailVerified": true,
+      "firstName": "Cliente",
+      "lastName": "Uno",
+      "credentials": [{ "type": "password", "value": "cliente1", "temporary": false }],
+      "realmRoles": ["CLIENTE"]
+    },
+    {
+      "username": "cliente2",
+      "enabled": true,
+      "email": "cliente2@complejo.local",
+      "emailVerified": true,
+      "firstName": "Cliente",
+      "lastName": "Dos",
+      "credentials": [{ "type": "password", "value": "cliente2", "temporary": false }],
+      "realmRoles": ["CLIENTE"]
+    },
+    {
+      "username": "service-account-eventos-service",
+      "enabled": true,
+      "serviceAccountClientId": "eventos-service",
+      "realmRoles": ["SERVICIO"]
+    }
+  ]
+}

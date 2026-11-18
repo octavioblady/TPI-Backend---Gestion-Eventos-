@@ -1,0 +1,45 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: recursos-service
+  datasource:
+    url: ${RECURSOS_DB_URL:jdbc:postgresql://localhost:5433/recursos_db}
+    username: ${DB_USER:complejo}
+    password: ${DB_PASSWORD:complejo}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  jackson:
+    time-zone: America/Argentina/Cordoba
+    serialization:
+      write-dates-as-timestamps: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # El issuer se valida contra el valor con el que Keycloak emite el token (KC_HOSTNAME);
+          # las claves públicas se descargan por la URL interna.
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080/realms/complejo}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8080/realms/complejo/protocol/openid-connect/certs}
+
+complejo:
+  tarifa-hora-default: 10000
+
+app:
+  docs:
+    public: ${DOCS_PUBLIC:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -1,0 +1,92 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: eventos-service
+  datasource:
+    url: ${EVENTOS_DB_URL:jdbc:postgresql://localhost:5434/eventos_db}
+    username: ${DB_USER:complejo}
+    password: ${DB_PASSWORD:complejo}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  jackson:
+    time-zone: America/Argentina/Cordoba
+    serialization:
+      write-dates-as-timestamps: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080/realms/complejo}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8080/realms/complejo/protocol/openid-connect/certs}
+      client:
+        registration:
+          recursos:
+            provider: keycloak
+            client-id: ${SERVICE_CLIENT_ID:eventos-service}
+            client-secret: ${SERVICE_CLIENT_SECRET:eventos-service-secret}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8080/realms/complejo/protocol/openid-connect/token}
+
+complejo:
+  senia-porcentaje: 50
+
+recursos:
+  url: ${RECURSOS_SERVICE_URL:http://localhost:8081}
+  timeout:
+    conexion: 1s
+    lectura: 2s
+
+# Córdoba capital. Adverso: lluvia > 40 %, granizo o ráfagas >= 50 km/h. Más de 16 días: no se consulta.
+clima:
+  url: ${WEATHER_API_URL:https://api.open-meteo.com/v1/forecast}
+  latitud: -31.4201
+  longitud: -64.1888
+  umbral-lluvia-porcentaje: 40
+  umbral-viento-kmh: 50
+  horizonte-dias: 16
+  timeout: 2s
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      recursos:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - ar.utn.complejo.eventos.recursos.RecursosRechazoException
+  retry:
+    instances:
+      recursos:
+        max-attempts: 2
+        wait-duration: 200ms
+        retry-exceptions:
+          - ar.utn.complejo.eventos.recursos.RecursosNoDisponibleException
+        ignore-exceptions:
+          - ar.utn.complejo.eventos.recursos.RecursosRechazoException
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+
+app:
+  docs:
+    public: ${DOCS_PUBLIC:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

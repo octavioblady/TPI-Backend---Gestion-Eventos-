@@ -1,0 +1,66 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: api-gateway
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8080/realms/complejo}
+          jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8080/realms/complejo/protocol/openid-connect/certs}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 20s
+          routes:
+            # Recursos: catálogo, mantenimientos y disponibilidad
+            - id: recursos-api
+              uri: ${RECURSOS_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/instalaciones/**,/api/v1/servicios/**,/api/v1/mantenimientos/**,/api/v1/disponibilidad
+            # Eventos: proceso central
+            - id: eventos-api
+              uri: ${EVENTOS_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/eventos/**
+            # Especificación OpenAPI de cada servicio (solo desarrollo)
+            - id: recursos-docs
+              uri: ${RECURSOS_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/docs/recursos/**
+              filters:
+                - RewritePath=/docs/recursos/(?<segmento>.*), /$\{segmento}
+            - id: eventos-docs
+              uri: ${EVENTOS_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/docs/eventos/**
+              filters:
+                - RewritePath=/docs/eventos/(?<segmento>.*), /$\{segmento}
+            # No existe ninguna ruta para /internal/**: el Gateway responde 404.
+
+app:
+  docs:
+    public: ${DOCS_PUBLIC:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: recursos-service
+        url: /docs/recursos/v3/api-docs
+      - name: eventos-service
+        url: /docs/eventos/v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

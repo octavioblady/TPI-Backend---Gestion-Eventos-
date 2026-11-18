@@ -1,0 +1,111 @@
+# Despliegue integral: docker compose up --build
+# Solo api-gateway (8000) y keycloak (8080) publican puertos. Servicios y bases quedan dentro de la red de Compose (trusted zone).
+services:
+  postgres-recursos:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: recursos_db
+      POSTGRES_USER: ${DB_USER:-complejo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Definir DB_PASSWORD en .env}
+    volumes:
+      - pgdata-recursos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d recursos_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres-eventos:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: eventos_db
+      POSTGRES_USER: ${DB_USER:-complejo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Definir DB_PASSWORD en .env}
+    volumes:
+      - pgdata-eventos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d eventos_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Definir KEYCLOAK_ADMIN_PASSWORD en .env}
+      # El 'iss' de los tokens es esta URL (la que usa el cliente desde el host).
+      KC_HOSTNAME: http://localhost:8080
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "8080:8080"
+
+  recursos-service:
+    build:
+      context: .
+      dockerfile: recursos-service/Dockerfile
+    environment:
+      RECURSOS_DB_URL: jdbc:postgresql://postgres-recursos:5432/recursos_db
+      DB_USER: ${DB_USER:-complejo}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:8080/realms/complejo}
+      JWT_JWK_SET_URI: http://keycloak:8080/realms/complejo/protocol/openid-connect/certs
+      DOCS_PUBLIC: ${DOCS_PUBLIC:-true}
+    depends_on:
+      postgres-recursos:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    restart: on-failure
+
+  eventos-service:
+    build:
+      context: .
+      dockerfile: eventos-service/Dockerfile
+    environment:
+      EVENTOS_DB_URL: jdbc:postgresql://postgres-eventos:5432/eventos_db
+      DB_USER: ${DB_USER:-complejo}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:8080/realms/complejo}
+      JWT_JWK_SET_URI: http://keycloak:8080/realms/complejo/protocol/openid-connect/certs
+      RECURSOS_SERVICE_URL: http://recursos-service:8081
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/complejo/protocol/openid-connect/token
+      SERVICE_CLIENT_ID: ${SERVICE_CLIENT_ID:-eventos-service}
+      SERVICE_CLIENT_SECRET: ${SERVICE_CLIENT_SECRET:?Definir SERVICE_CLIENT_SECRET en .env}
+      WEATHER_API_URL: ${WEATHER_API_URL:-https://api.open-meteo.com/v1/forecast}
+      DOCS_PUBLIC: ${DOCS_PUBLIC:-true}
+    depends_on:
+      postgres-eventos:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      recursos-service:
+        condition: service_started
+    restart: on-failure
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI:-http://localhost:8080/realms/complejo}
+      JWT_JWK_SET_URI: http://keycloak:8080/realms/complejo/protocol/openid-connect/certs
+      RECURSOS_SERVICE_URL: http://recursos-service:8081
+      EVENTOS_SERVICE_URL: http://eventos-service:8082
+      DOCS_PUBLIC: ${DOCS_PUBLIC:-true}
+    ports:
+      - "8000:8000"
+    depends_on:
+      keycloak:
+        condition: service_started
+      recursos-service:
+        condition: service_started
+      eventos-service:
+        condition: service_started
+    restart: on-failure
+
+volumes:
+  pgdata-recursos:
+  pgdata-eventos:
