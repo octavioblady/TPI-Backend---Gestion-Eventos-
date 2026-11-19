@@ -65,8 +65,20 @@ class EventoApiTest extends BaseEventosTest {
                 .andExpect(jsonPath("$.precioTotal", is(84000.0)))     // 2 instalaciones x 4 h x 10.000 + 20 sillas x 200
                 .andExpect(jsonPath("$.seniaMonto", is(42000.0)))      // 50 %
                 .andExpect(jsonPath("$.seniaAbonada", is(false)))
-                .andExpect(jsonPath("$.historial", hasSize(1)));
+                .andExpect(jsonPath("$.historial", hasSize(1)))
+                .andExpect(jsonPath("$.codigoRechazo").doesNotExist())   // los campos sin valor no se serializan
+                .andExpect(jsonPath("$.motivoRechazo").doesNotExist());
         verify(recursos, never()).reservar(any()); // todavía no se reserva nada
+    }
+
+    @Test
+    void pronosticoDeInstalacionBajoTechoExplicaQueNoAplicaYNoIncluyeAdvertencia() throws Exception {
+        long id = eventoConfirmado("cli-1", "2026-12-10", "[1]");
+        mvc.perform(post("/api/v1/eventos/" + id + "/pronostico").with(cliente("cli-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado", is("NO_APLICA")))
+                .andExpect(jsonPath("$.mensaje", is("No aplica para instalaciones bajo techo")))
+                .andExpect(jsonPath("$.advertencia").doesNotExist());
     }
 
     @Test

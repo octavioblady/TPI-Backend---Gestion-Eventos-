@@ -15,6 +15,7 @@ spring:
   flyway:
     enabled: true
   jackson:
+    default-property-inclusion: non_null   # los campos sin valor no se serializan
     time-zone: America/Argentina/Cordoba
     serialization:
       write-dates-as-timestamps: false

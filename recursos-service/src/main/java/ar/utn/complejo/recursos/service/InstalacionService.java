@@ -37,7 +37,7 @@ public class InstalacionService {
 
     @Transactional(readOnly = true)
     public List<InstalacionResponse> listar(boolean soloActivas) {
-        List<Instalacion> lista = soloActivas ? instalaciones.findByActivaTrueOrderByNombre() : instalaciones.findAllByOrderByNombre();
+        List<Instalacion> lista = soloActivas ? instalaciones.findByActivaTrueOrderByNombre() : instalaciones.findByActivaFalseOrderByNombre();
         return lista.stream().map(InstalacionService::aDto).toList();
     }
 

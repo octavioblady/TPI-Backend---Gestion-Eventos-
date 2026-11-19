@@ -33,6 +33,9 @@ docker compose up --build
 ## Postman
 Importar `postman/TPI-Gestion-Eventos.postman_collection.json` y `postman/TPI-Gestion-Eventos.postman_environment.json`. La colección obtiene sola los tokens y los ids del catálogo. La carpeta 04 es manual (detener `recursos-service` con `docker compose stop recursos-service`).
 
+## Datos de demostración
+Al crear las bases por primera vez se cargan (migraciones Flyway `V2` de eventos y `V3` de recursos) 7 eventos de ejemplo (confirmados, solicitado, cancelado, rechazado, finalizado y uno con advertencia meteorológica) y 3 mantenimientos, con fechas relativas al día de arranque. Pertenecen a `cliente1` y `cliente2`: el id de cada usuario en Keycloak es su nombre de usuario (fijado en el realm). Para volver a este estado: `docker compose down -v` y `docker compose up --build`.
+
 ## Decisiones principales
 - Tarifa fija de $10.000/hora; seña del 50% como condición para confirmar (sin seña: RECHAZADO).
 - Rechazo de negocio: respuesta 200/201 con estado RECHAZADO y `codigoRechazo`; falla técnica de Recursos: 503/504.

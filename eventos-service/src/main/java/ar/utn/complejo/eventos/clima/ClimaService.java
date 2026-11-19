@@ -50,7 +50,7 @@ public class ClimaService {
     /** Evalúa el evento. No modifica la entidad: quien llama decide si persiste la advertencia. */
     public Resultado evaluar(Evento evento) {
         if (!evento.usaAireLibre()) {
-            return new Resultado(Estado.NO_APLICA, Optional.empty(), "El evento no usa instalaciones al aire libre");
+            return new Resultado(Estado.NO_APLICA, Optional.empty(), "No aplica para instalaciones bajo techo");
         }
         LocalDate hoy = ReglasTiempo.ahora(reloj).toLocalDate();
         if (evento.getInicio().toLocalDate().isAfter(hoy.plusDays(props.horizonteDias()))) {

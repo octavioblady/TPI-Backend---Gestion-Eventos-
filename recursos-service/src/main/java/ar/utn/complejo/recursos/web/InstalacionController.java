@@ -22,7 +22,7 @@ public class InstalacionController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar instalaciones (por defecto solo las activas)")
+    @Operation(summary = "Listar instalaciones: soloActivas=true (por defecto) devuelve las activas; soloActivas=false, solo las dadas de baja")
     public List<InstalacionResponse> listar(@RequestParam(defaultValue = "true") boolean soloActivas) {
         return service.listar(soloActivas);
     }

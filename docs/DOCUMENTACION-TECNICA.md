@@ -108,7 +108,7 @@ Pronóstico adverso (solo instalaciones al aire libre, eventos a ≤ 16 días): 
 
 | Endpoint | Éxito | Errores |
 |---|---|---|
-| `GET /api/v1/instalaciones[/{id}]` | 200 | 401, 403, 404 |
+| `GET /api/v1/instalaciones[/{id}]` (`soloActivas=true` por defecto: activas; `false`: solo las dadas de baja) | 200 | 401, 403, 404 |
 | `POST /api/v1/instalaciones` | 201 | 400 (validación, horarios inválidos o repetidos), 401, 403, 409 (nombre repetido) |
 | `PUT /api/v1/instalaciones/{id}` | 200 | 400, 401, 403, 404, 409 (nombre repetido) |
 | `DELETE /api/v1/instalaciones/{id}` | 204 | 401, 403, 404, 409 (con reservas futuras) |
@@ -128,6 +128,8 @@ Pronóstico adverso (solo instalaciones al aire libre, eventos a ≤ 16 días): 
 Un rechazo de negocio **no** es un error HTTP: la operación se procesó y el evento queda RECHAZADO (200/201). Un fallo técnico de Recursos sí: 503 (no disponible/circuito abierto) o 504 (timeout).
 
 ## 7. Formato de error estándar
+
+En todas las respuestas de los servicios, los campos sin valor (`null`) no se incluyen en el JSON.
 
 ```json
 { "timestamp": "2027-01-10T15:04:05-03:00", "status": 409, "error": "Conflict",
@@ -150,3 +152,4 @@ Llamadas a Recursos con timeout (1 s conexión / 2 s lectura), reintentos y circ
 - Swagger UI unificado en `http://localhost:8000/swagger-ui.html`; especificaciones en `/docs/recursos/v3/api-docs` y `/docs/eventos/v3/api-docs` (públicas solo con `DOCS_PUBLIC=true`, uso de desarrollo).
 - Reprogramación = cancelar + solicitar nuevo evento.
 - Predio completo = las 4 instalaciones (cancha, SUM, salón principal + patio exterior como una sola, cocina).
+- Datos de demostración (7 eventos y 3 mantenimientos) cargados por migración Flyway en el primer arranque; ver README.

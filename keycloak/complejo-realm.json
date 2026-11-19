@@ -35,6 +35,7 @@
   ],
   "users": [
     {
+      "id": "admin1",
       "username": "admin1",
       "enabled": true,
       "email": "admin1@complejo.local",
@@ -45,6 +46,7 @@
       "realmRoles": ["ADMIN"]
     },
     {
+      "id": "cliente1",
       "username": "cliente1",
       "enabled": true,
       "email": "cliente1@complejo.local",
@@ -55,6 +57,7 @@
       "realmRoles": ["CLIENTE"]
     },
     {
+      "id": "cliente2",
       "username": "cliente2",
       "enabled": true,
       "email": "cliente2@complejo.local",

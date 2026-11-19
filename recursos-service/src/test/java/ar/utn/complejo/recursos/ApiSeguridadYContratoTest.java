@@ -69,6 +69,10 @@ class ApiSeguridadYContratoTest extends BaseIntegrationTest {
     void bajaLogicaOcultaLaInstalacionDelListado() throws Exception {
         mvc.perform(delete("/api/v1/instalaciones/" + cancha.getId()).with(como("ADMIN"))).andExpect(status().isNoContent());
         mvc.perform(get("/api/v1/instalaciones").with(como("CLIENTE"))).andExpect(jsonPath("$", hasSize(2)));
+        mvc.perform(get("/api/v1/instalaciones?soloActivas=true").with(como("CLIENTE")))
+                .andExpect(jsonPath("$", hasSize(2))).andExpect(jsonPath("$[*].activa", everyItem(is(true))));
+        mvc.perform(get("/api/v1/instalaciones?soloActivas=false").with(como("CLIENTE")))
+                .andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].activa", is(false)));
     }
 
     @Test
